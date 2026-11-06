@@ -70,14 +70,28 @@ def generate_ai_report(business_metrics):
     for attempt in range(3):
         try:
             response = client.interactions.create(
-                model="gemini-3.8-flash",
+                model="gemini-3.5-flash-lite",
                 input=prompt,
                 system_instruction=instructions
             )
             return response.output_text
 
         except Exception as error:
-            if "503" in str(error) and attempt < 2:
+            error_message = str(error).lower()
+
+            temporary_errors = [
+                "503",
+                "server disconnected",
+                "connection",
+                "timeout"
+            ]
+
+            is_temporary = any(
+                message in error_message
+                for message in temporary_errors
+            )
+
+            if is_temporary and attempt < 2:
                 time.sleep(10 * (attempt + 1))
             else:
                 raise
