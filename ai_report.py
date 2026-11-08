@@ -42,7 +42,6 @@ def generate_ai_report(business_metrics):
     )
 
     instructions = """
-    You are a senior business analyst.
 
     Prepare a management report with:
     1. Executive Summary
@@ -50,9 +49,28 @@ def generate_ai_report(business_metrics):
     3. Inventory and Waste Analysis
     4. Areas of Concern
     5. Recommended Management Actions
+    6. Monthly Trend Analysis
+    7. Product and Category Performance
 
-    Use only the supplied figures.
-    Do not invent data or assume unproven causes.
+    - Use only the supplied figures.
+    - Do not invent data or assume unproven causes.
+    - Analyse monthly revenue and gross profit changes.
+    - Highlight declining months and their percentage changes.
+    - Distinguish isolated declines from sustained deterioration.
+    - Do not describe a decline as a sustained trend without sufficient consecutive-month evidence.
+    - Identify products and categories with the largest revenue declines.
+    - Report both percentage declines and actual revenue lost.
+    - Explain which products and categories warrant management attention.
+    - Analyse regional revenue and gross-profit declines.
+    - Identify regions with the largest percentage and monetary declines.
+    - Recommend management attention based on the supplied regional figures.
+    
+    FORMATTING RULES:
+    - Use clear, concise, properly spaced sentences and standard Markdown.
+    - Apply consistent headings, fonts, and formatting throughout.
+    - Highlight key figures and trends for ease of readability
+    - Use bullet points for recommendations; avoid tables, HTML, and code formatting.
+    - Present all figures and currency values as ordinary, readable text.
     """
 
     prompt = f"""

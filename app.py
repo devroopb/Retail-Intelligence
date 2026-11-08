@@ -206,6 +206,286 @@ for date, row in monthly.iterrows():
         "gross_profit": round(float(row["gross_profit"]), 2)
     }
 
+# ==========================================
+# MONTH-OVER-MONTH TREND ANALYSIS
+# ==========================================
+
+monthly["revenue_change"] = monthly["revenue"].pct_change() * 100
+
+monthly["profit_change"] = monthly["gross_profit"].pct_change() * 100
+
+monthly["revenue_declining"] = monthly["revenue_change"] < 0
+
+monthly["profit_declining"] = monthly["profit_change"] < 0
+
+revenue_decline_months = int(monthly["revenue_declining"].sum())
+
+profit_decline_months = int(monthly["profit_declining"].sum())
+
+revenue_decline_details = monthly.loc[
+    monthly["revenue_declining"],
+    ["revenue", "revenue_change"]
+].round(2).to_dict("index")
+
+profit_decline_details = monthly.loc[
+    monthly["profit_declining"],
+    ["gross_profit", "profit_change"]
+].round(2).to_dict("index")
+
+# ==========================================
+# CONSECUTIVE DECLINE DETECTION
+# ==========================================
+
+def calculate_decline_streak(decline_series):
+    current_streak = 0
+    longest_streak = 0
+
+    for declining in decline_series.fillna(False):
+        if declining:
+            current_streak += 1
+            longest_streak = max(
+                longest_streak,
+                current_streak
+            )
+        else:
+            current_streak = 0
+
+    return {
+        "current_consecutive_declines": current_streak,
+        "longest_consecutive_declines": longest_streak
+    }
+
+
+revenue_decline_streak = calculate_decline_streak(
+    monthly["revenue_declining"]
+)
+
+profit_decline_streak = calculate_decline_streak(
+    monthly["profit_declining"]
+)
+
+# ==========================================
+# PRODUCT AND CATEGORY PERFORMANCE
+# ==========================================
+
+# Calculate monthly revenue for each product.
+product_monthly = (
+    filtered.assign(
+        revenue=filtered["units_sold"] * filtered["unit_price"]
+    )
+    .groupby([
+        pd.Grouper(key="date", freq="MS"),
+        "product",
+        "category"
+    ])["revenue"]
+    .sum()
+    .reset_index()
+)
+
+# Calculate monthly revenue changes for each product.
+product_monthly["revenue_change"] = (
+    product_monthly
+    .groupby("product")["revenue"]
+    .pct_change() * 100
+)
+
+# Identify products with declining revenue.
+product_monthly["revenue_declining"] = (
+    product_monthly["revenue_change"] < 0
+)
+
+# Calculate monthly revenue for each category.
+category_monthly = (
+    filtered.assign(
+        revenue=filtered["units_sold"] * filtered["unit_price"]
+    )
+    .groupby([
+        pd.Grouper(key="date", freq="MS"),
+        "category"
+    ])["revenue"]
+    .sum()
+    .reset_index()
+)
+
+# Calculate monthly revenue changes for each category.
+category_monthly["revenue_change"] = (
+    category_monthly
+    .groupby("category")["revenue"]
+    .pct_change() * 100
+)
+
+category_monthly["revenue_declining"] = (
+    category_monthly["revenue_change"] < 0
+)
+
+# ==========================================
+# BIGGEST REVENUE DECLINES
+# ==========================================
+
+# Compare each product's latest month with its previous month.
+product_changes = product_monthly.dropna(
+    subset=["revenue_change"]
+).sort_values("revenue_change")
+
+# Compare each category's latest month with its previous month.
+category_changes = category_monthly.dropna(
+    subset=["revenue_change"]
+).sort_values("revenue_change")
+
+# Get the five products with the largest percentage declines.
+biggest_product_declines = (
+    product_changes[
+        product_changes["revenue_declining"]
+    ]
+    .groupby("product")
+    .tail(1)
+    .sort_values("revenue_change")
+    .head(5)
+)
+
+# Get the five categories with the largest percentage declines.
+biggest_category_declines = (
+    category_changes[
+        category_changes["revenue_declining"]
+    ]
+    .groupby("category")
+    .tail(1)
+    .sort_values("revenue_change")
+    .head(5)
+)
+
+# ==========================================
+# REVENUE LOSS CALCULATION
+# ==========================================
+
+biggest_product_declines = biggest_product_declines.copy()
+
+biggest_product_declines["previous_revenue"] = (
+    biggest_product_declines["revenue"]
+    / (1 + biggest_product_declines["revenue_change"] / 100)
+)
+
+biggest_product_declines["revenue_lost"] = (
+    biggest_product_declines["previous_revenue"]
+    - biggest_product_declines["revenue"]
+)
+
+biggest_category_declines = biggest_category_declines.copy()
+
+biggest_category_declines["previous_revenue"] = (
+    biggest_category_declines["revenue"]
+    / (1 + biggest_category_declines["revenue_change"] / 100)
+)
+
+biggest_category_declines["revenue_lost"] = (
+    biggest_category_declines["previous_revenue"]
+    - biggest_category_declines["revenue"]
+)
+
+# ==========================================
+# REGIONAL TREND ANALYSIS
+# ==========================================
+
+regional_monthly = (
+    filtered.assign(
+        revenue=filtered["units_sold"] * filtered["unit_price"],
+        gross_profit=(
+            filtered["units_sold"]
+            * (filtered["unit_price"] - filtered["unit_cost"])
+        )
+    )
+    .groupby([
+        pd.Grouper(key="date", freq="MS"),
+        "region"
+    ])[["revenue", "gross_profit"]]
+    .sum()
+    .reset_index()
+)
+
+# Calculate monthly changes for each region.
+regional_monthly["revenue_change"] = (
+    regional_monthly
+    .groupby("region")["revenue"]
+    .pct_change() * 100
+)
+
+regional_monthly["profit_change"] = (
+    regional_monthly
+    .groupby("region")["gross_profit"]
+    .pct_change() * 100
+)
+
+# Identify declining regional performance.
+regional_monthly["revenue_declining"] = (
+    regional_monthly["revenue_change"] < 0
+)
+
+regional_monthly["profit_declining"] = (
+    regional_monthly["profit_change"] < 0
+)
+
+# ==========================================
+# BIGGEST REGIONAL DECLINES
+# ==========================================
+
+# Sort regional data chronologically.
+regional_changes = regional_monthly.sort_values("date")
+
+# Get each region's latest monthly performance.
+regional_latest_changes = (
+    regional_changes
+    .groupby("region")
+    .tail(1)
+)
+
+# Identify regions with declining revenue.
+biggest_regional_revenue_declines = (
+    regional_latest_changes
+    .dropna(subset=["revenue_change"])
+    .loc[lambda df: df["revenue_declining"]]
+    .sort_values("revenue_change")
+)
+
+# Identify regions with declining gross profit.
+biggest_regional_profit_declines = (
+    regional_latest_changes
+    .dropna(subset=["profit_change"])
+    .loc[lambda df: df["profit_declining"]]
+    .sort_values("profit_change")
+)
+
+# Calculate previous-month revenue and gross profit.
+biggest_regional_revenue_declines = (
+    biggest_regional_revenue_declines.copy()
+)
+
+biggest_regional_revenue_declines["previous_revenue"] = (
+    biggest_regional_revenue_declines["revenue"]
+    / (1 + biggest_regional_revenue_declines["revenue_change"] / 100)
+)
+
+biggest_regional_revenue_declines["revenue_lost"] = (
+    biggest_regional_revenue_declines["previous_revenue"]
+    - biggest_regional_revenue_declines["revenue"]
+)
+
+biggest_regional_profit_declines = (
+    biggest_regional_profit_declines.copy()
+)
+
+biggest_regional_profit_declines["previous_gross_profit"] = (
+    biggest_regional_profit_declines["gross_profit"]
+    / (1 + biggest_regional_profit_declines["profit_change"] / 100)
+)
+
+biggest_regional_profit_declines["gross_profit_lost"] = (
+    biggest_regional_profit_declines["previous_gross_profit"]
+    - biggest_regional_profit_declines["gross_profit"]
+)
+
+# ==========================================
+# BUSINESS METRICS ASSEMBLY
+# ==========================================
 
 # Assemble the complete business metrics dictionary.
 business_metrics = {
@@ -249,6 +529,44 @@ business_metrics = {
     "regional_performance": regional_performance,
 
     "monthly_performance": monthly_performance,
+    
+    "monthly_trend_analysis": {
+        "months_with_revenue_decline": revenue_decline_months,
+        "months_with_gross_profit_decline": profit_decline_months,
+        "revenue_decline_details": {
+            str(date): details
+            for date, details in revenue_decline_details.items()
+        },
+        "profit_decline_details": {
+            str(date): details
+            for date, details in profit_decline_details.items()
+        },
+        "consecutive_decline_analysis": {
+            "revenue": revenue_decline_streak,
+            "gross_profit": profit_decline_streak
+        },
+        "product_category_analysis": {
+            "biggest_product_declines": biggest_product_declines[
+                ["product", "category", "revenue", "revenue_change", "revenue_lost"]
+            ].round(2).to_dict("records"),
+
+            "biggest_category_declines": biggest_category_declines[
+                ["category", "revenue", "revenue_change", "revenue_lost"]
+            ].round(2).to_dict("records")
+        },
+        "regional_trend_analysis": {
+            "biggest_regional_revenue_declines": (
+                biggest_regional_revenue_declines[
+                    ["region", "revenue", "revenue_change", "revenue_lost"]
+                ].round(2).to_dict("records")
+            ),
+            "biggest_regional_profit_declines": (
+                biggest_regional_profit_declines[
+                    ["region", "gross_profit", "profit_change", "gross_profit_lost"]
+                ].round(2).to_dict("records")
+            )
+        },
+    },
 
     "accounting_note": (
         "Gross profit is revenue minus COGS on units sold. "
@@ -256,7 +574,6 @@ business_metrics = {
         "subtracted from gross profit in this dashboard."
     )
 }
-
 
 # Create a fingerprint of the current dashboard selection.
 # This helps us identify when filters have changed.
